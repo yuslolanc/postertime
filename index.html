@@ -5,101 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Kiosk Rotation</title>
   <style>
-    html, body {
-      margin: 0; height: 100%; background: #000; overflow: hidden;
-    }
-    iframe {
-      position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block;
-      opacity: 0; transition: opacity .45s ease;
-    }
-    iframe.ready { opacity: 1; }
-    #status, .msg { display:none !important; } /* hide any legacy status bars */
+    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
+    iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; }
   </style>
 </head>
 <body>
-  <iframe id="frame" src="about:blank" referrerpolicy="no-referrer"></iframe>
+  <iframe id="frame" src="https://yuslolanc.github.io/kiosk/"></iframe>
 
   <script>
-  (function(){
     const urls = [
-      "https://iqamah.lancasterisoc.org/",
-      "https://posters.lancasterisoc.org/"
+      "https://yuslolanc.github.io/kiosk/",
+      "https://yuslolanc.github.io/prayertimes/"
     ];
-
-    const qs = new URLSearchParams(location.search);
-    const durationMs = Math.max(5, +(qs.get('t') || 60)) * 1000;
-
+    let i = 0;
     const frame = document.getElementById("frame");
 
-    let idx = 0;
-    let rotateTimer = null;
-    let loadGuard = null;
-    let ticket = 0;
-    let currentUrl = null;
-
-    function clearTimers(){
-      if (rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
-      if (loadGuard)   { clearTimeout(loadGuard);   loadGuard   = null; }
-    }
-
-    function scheduleNext(){
-      clearTimeout(rotateTimer);
-      rotateTimer = setTimeout(next, durationMs);
-    }
-
-    function next(){
-      idx = (idx + 1) % urls.length;
-      load(urls[idx]);
-    }
-
-    function load(url){
-      clearTimers();
-      const myTicket = ++ticket;
-      currentUrl = url;
-
-      frame.classList.remove("ready");
-      frame.onload = null;
-      frame.src = "about:blank";
-
-      requestAnimationFrame(() => {
-        frame.addEventListener("load", () => {
-          if (ticket !== myTicket) return;          // superseded
-          if (frame.src === "about:blank") return;  // ignore the blank reset
-          if (frame.src !== url && !frame.src.startsWith(url)) return; // ignore redirects
-
-          frame.classList.add("ready");
-          scheduleNext(); // start exact 60s now
-        });
-
-        // guard: skip if nothing loads in 15s
-        loadGuard = setTimeout(() => {
-          if (ticket === myTicket) next();
-        }, 15000);
-
-        frame.src = url;
-      });
-    }
-
-    // Pause/resume when hidden/visible
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clearTimers();
-      else scheduleNext();
-    });
-
-    // Daily auto-refresh just after midnight
-    function msToMidnight(){
-      const n=new Date(), x=new Date(n);
-      x.setHours(24,0,0,0);
-      return x-n+5000;
-    }
-    setTimeout(()=>location.reload(), msToMidnight());
-
-    // remove any leftover status messages
-    document.querySelectorAll('#status,.msg').forEach(n=>n.remove());
-
-    // start
-    load(urls[0]);
-  })();
+    setInterval(() => {
+      i = (i + 1) % urls.length;
+      frame.src = urls[i];
+    }, 60000); // 60s per page
   </script>
 </body>
 </html>
