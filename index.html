@@ -2,47 +2,40 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Kiosk Rotation</title>
   <style>
     html, body {
       margin: 0; height: 100%; background: #000; overflow: hidden;
-      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     }
-    /* Fullscreen frame with smooth fade-in when ready */
     iframe {
       position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block;
       opacity: 0; transition: opacity .45s ease;
     }
     iframe.ready { opacity: 1; }
-
-    /* Belt-and-braces: hide any legacy status bars if they somehow exist */
-    #status, .msg { display: none !important; }
+    #status, .msg { display:none !important; } /* hide any legacy status bars */
   </style>
 </head>
 <body>
-  <!-- The display surface -->
   <iframe id="frame" src="about:blank" referrerpolicy="no-referrer"></iframe>
 
   <script>
   (function(){
-    // Pages to rotate through (add/remove as needed)
     const urls = [
       "https://iqamah.lancasterisoc.org/",
       "https://posters.lancasterisoc.org/"
     ];
 
-    // Duration per page: default 60s, override with ?t=90 (seconds)
     const qs = new URLSearchParams(location.search);
     const durationMs = Math.max(5, +(qs.get('t') || 60)) * 1000;
 
     const frame = document.getElementById("frame");
 
-    let idx = 0;            // current index in urls
-    let rotateTimer = null; // timer for the next rotation
-    let loadGuard = null;   // guard timeout if a page never finishes loading
-    let ticket = 0;         // monotonic "nonce" to ignore stale load events
+    let idx = 0;
+    let rotateTimer = null;
+    let loadGuard = null;
+    let ticket = 0;
+    let currentUrl = null;
 
     function clearTimers(){
       if (rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
@@ -50,8 +43,8 @@
     }
 
     function scheduleNext(){
-      if (rotateTimer) clearTimeout(rotateTimer);
-      rotateTimer = setTimeout(next, durationMs); // exact visible time after load
+      clearTimeout(rotateTimer);
+      rotateTimer = setTimeout(next, durationMs);
     }
 
     function next(){
@@ -61,58 +54,50 @@
 
     function load(url){
       clearTimers();
-
-      // New navigation ticket; invalidates any previous onload/guards
       const myTicket = ++ticket;
+      currentUrl = url;
 
-      // Reset the frame to a blank state before swapping
       frame.classList.remove("ready");
       frame.onload = null;
       frame.src = "about:blank";
 
-      // Navigate on next frame to ensure the 'about:blank' takes effect
       requestAnimationFrame(() => {
-        function onLoadOnce(){
-          if (myTicket !== ticket) return; // ignore if a newer nav started
-          // Page is ready and visible; start the exact 60s countdown now
+        frame.addEventListener("load", () => {
+          if (ticket !== myTicket) return;          // superseded
+          if (frame.src === "about:blank") return;  // ignore the blank reset
+          if (frame.src !== url && !frame.src.startsWith(url)) return; // ignore redirects
+
           frame.classList.add("ready");
-          scheduleNext();
-        }
+          scheduleNext(); // start exact 60s now
+        });
 
-        frame.addEventListener("load", onLoadOnce, { once: true });
-
-        // If the page never becomes ready (blocked/CSP/offline), skip it
+        // guard: skip if nothing loads in 15s
         loadGuard = setTimeout(() => {
-          if (myTicket !== ticket) return; // superseded by a newer load
-          next();
-        }, 12000); // 12s guard window
+          if (ticket === myTicket) next();
+        }, 15000);
 
         frame.src = url;
       });
     }
 
-    // Pause rotation when the tab/window is hidden; resume with a fresh full interval
+    // Pause/resume when hidden/visible
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        if (rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
-      } else {
-        // Resume only if we are not mid-load; either way, give a fresh full interval
-        scheduleNext();
-      }
+      if (document.hidden) clearTimers();
+      else scheduleNext();
     });
 
-    // Daily auto-reload a few seconds after midnight to keep things fresh
+    // Daily auto-refresh just after midnight
     function msToMidnight(){
-      const n = new Date(), x = new Date(n);
-      x.setHours(24, 0, 0, 0);
-      return x - n + 5000;
+      const n=new Date(), x=new Date(n);
+      x.setHours(24,0,0,0);
+      return x-n+5000;
     }
-    setTimeout(() => location.reload(), msToMidnight());
+    setTimeout(()=>location.reload(), msToMidnight());
 
-    // Remove any leftover status elements injected by older versions (defensive)
-    document.querySelectorAll('#status, .msg').forEach(n => n.remove());
+    // remove any leftover status messages
+    document.querySelectorAll('#status,.msg').forEach(n=>n.remove());
 
-    // Kick off
+    // start
     load(urls[0]);
   })();
   </script>
