@@ -1,59 +1,120 @@
-<script>
-(function(){
-  const urls = [
-    "https://iqamah.lancasterisoc.org/",
-    "https://posters.lancasterisoc.org/"
-  ];
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Kiosk Rotation</title>
+  <style>
+    html, body {
+      margin: 0; height: 100%; background: #000; overflow: hidden;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    /* Fullscreen frame with smooth fade-in when ready */
+    iframe {
+      position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block;
+      opacity: 0; transition: opacity .45s ease;
+    }
+    iframe.ready { opacity: 1; }
 
-  const qs = new URLSearchParams(location.search);
-  const durationMs = Math.max(5, +(qs.get('t')||60)) * 1000;
+    /* Belt-and-braces: hide any legacy status bars if they somehow exist */
+    #status, .msg { display: none !important; }
+  </style>
+</head>
+<body>
+  <!-- The display surface -->
+  <iframe id="frame" src="about:blank" referrerpolicy="no-referrer"></iframe>
 
-  const frame = document.getElementById("frame");
-  let i = 0, rotateTimer = null, loadGuard = null;
+  <script>
+  (function(){
+    // Pages to rotate through (add/remove as needed)
+    const urls = [
+      "https://iqamah.lancasterisoc.org/",
+      "https://posters.lancasterisoc.org/"
+    ];
 
-  function next(){
-    i = (i + 1) % urls.length;
-    load(urls[i]);
-  }
+    // Duration per page: default 60s, override with ?t=90 (seconds)
+    const qs = new URLSearchParams(location.search);
+    const durationMs = Math.max(5, +(qs.get('t') || 60)) * 1000;
 
-  function scheduleNext(){
-    clearTimeout(rotateTimer);
-    rotateTimer = setTimeout(next, durationMs); // full 60s after load
-  }
+    const frame = document.getElementById("frame");
 
-  function load(url){
-    clearTimeout(loadGuard);
-    clearTimeout(rotateTimer);
+    let idx = 0;            // current index in urls
+    let rotateTimer = null; // timer for the next rotation
+    let loadGuard = null;   // guard timeout if a page never finishes loading
+    let ticket = 0;         // monotonic "nonce" to ignore stale load events
 
-    frame.classList.remove("ready");
-    frame.src = "about:blank";
+    function clearTimers(){
+      if (rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
+      if (loadGuard)   { clearTimeout(loadGuard);   loadGuard   = null; }
+    }
 
-    requestAnimationFrame(() => {
-      frame.addEventListener("load", () => {
-        clearTimeout(loadGuard);        // cancel the skip timer
-        frame.classList.add("ready");
-        scheduleNext();                 // start 60s countdown now
-      }, { once:true });
+    function scheduleNext(){
+      if (rotateTimer) clearTimeout(rotateTimer);
+      rotateTimer = setTimeout(next, durationMs); // exact visible time after load
+    }
 
-      // guard: if site never loads, skip after 12s
-      loadGuard = setTimeout(() => next(), 12000);
-      frame.src = url;
+    function next(){
+      idx = (idx + 1) % urls.length;
+      load(urls[idx]);
+    }
+
+    function load(url){
+      clearTimers();
+
+      // New navigation ticket; invalidates any previous onload/guards
+      const myTicket = ++ticket;
+
+      // Reset the frame to a blank state before swapping
+      frame.classList.remove("ready");
+      frame.onload = null;
+      frame.src = "about:blank";
+
+      // Navigate on next frame to ensure the 'about:blank' takes effect
+      requestAnimationFrame(() => {
+        function onLoadOnce(){
+          if (myTicket !== ticket) return; // ignore if a newer nav started
+          // Page is ready and visible; start the exact 60s countdown now
+          frame.classList.add("ready");
+          scheduleNext();
+        }
+
+        frame.addEventListener("load", onLoadOnce, { once: true });
+
+        // If the page never becomes ready (blocked/CSP/offline), skip it
+        loadGuard = setTimeout(() => {
+          if (myTicket !== ticket) return; // superseded by a newer load
+          next();
+        }, 12000); // 12s guard window
+
+        frame.src = url;
+      });
+    }
+
+    // Pause rotation when the tab/window is hidden; resume with a fresh full interval
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        if (rotateTimer) { clearTimeout(rotateTimer); rotateTimer = null; }
+      } else {
+        // Resume only if we are not mid-load; either way, give a fresh full interval
+        scheduleNext();
+      }
     });
-  }
 
-  // pause if kiosk window hidden, resume with full interval
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) clearTimeout(rotateTimer);
-    else scheduleNext();
-  });
+    // Daily auto-reload a few seconds after midnight to keep things fresh
+    function msToMidnight(){
+      const n = new Date(), x = new Date(n);
+      x.setHours(24, 0, 0, 0);
+      return x - n + 5000;
+    }
+    setTimeout(() => location.reload(), msToMidnight());
 
-  // auto refresh daily
-  function msToMidnight(){
-    const n=new Date(), x=new Date(n); x.setHours(24,0,0,0);
-    return x-n+5000;
-  }
-  setTimeout(()=>location.reload(), msToMidnight());
+    // Remove any leftover status elements injected by older versions (defensive)
+    document.querySelectorAll('#status, .msg').forEach(n => n.remove());
 
-  load(urls[0]);
-})();
-</script>
+    // Kick off
+    load(urls[0]);
+  })();
+  </script>
+</body>
+</html>
