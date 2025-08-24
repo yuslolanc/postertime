@@ -5,25 +5,90 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Kiosk Rotation</title>
   <style>
-    html, body { margin:0; height:100%; background:#000; overflow:hidden; }
-    iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; }
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    iframe{
+      position:fixed; inset:0; width:100%; height:100%; border:0; display:block;
+      opacity:0; transition:opacity .45s ease;
+    }
+    iframe.ready{ opacity:1; }
+    .msg{
+      position:fixed; inset:auto 0 0 0; padding:8px 12px; font:14px/1.4 system-ui, sans-serif;
+      color:#9aa6b2; background:rgba(0,0,0,.4); text-align:center;
+    }
   </style>
 </head>
 <body>
-  <iframe id="frame" src="https://yuslolanc.github.io/kiosk/"></iframe>
+  <iframe id="frame" src="about:blank" referrerpolicy="no-referrer"></iframe>
+  <div class="msg" id="status" aria-live="polite"></div>
 
   <script>
+  (function(){
     const urls = [
       "https://iqamah.lancasterisoc.org/",
       "https://posters.lancasterisoc.org/"
     ];
-    let i = 0;
-    const frame = document.getElementById("frame");
 
-    setInterval(() => {
+    // Duration: ?t=90 (seconds) overrides default 60
+    const qs = new URLSearchParams(location.search);
+    const durationMs = Math.max(5, +(qs.get('t')||60)) * 1000;
+
+    const frame = document.getElementById('frame');
+    const status = document.getElementById('status');
+    let i = 0, timer = null, loadGuard = null;
+
+    function say(m){ status.textContent = m||''; }
+
+    function next(){
       i = (i + 1) % urls.length;
-      frame.src = urls[i];
-    }, 60000); // 60s per page
+      load(urls[i]);
+    }
+
+    function load(url){
+      clearTimeout(loadGuard);
+      frame.classList.remove('ready');
+      frame.src = 'about:blank'; // hard reset before swapping
+      say('Loading: ' + url);
+
+      // Start loading
+      frame.src = url;
+
+      // If it loads, fade in and schedule next swap
+      const onload = () => {
+        frame.classList.add('ready');
+        say('');
+        schedule();
+      };
+      frame.onload = onload;
+
+      // If a page blocks framing or is down, skip it
+      loadGuard = setTimeout(() => {
+        say('Skipped (took too long): ' + url);
+        next();
+      }, 8000); // 8s max to become "ready"
+    }
+
+    function schedule(){
+      clearTimeout(timer);
+      timer = setTimeout(next, durationMs);
+    }
+
+    // Pause rotation when tab isn’t visible (kiosk minimised)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden){ clearTimeout(timer); }
+      else { schedule(); }
+    });
+
+    // Reload daily at midnight to stay fresh
+    function msToMidnight(){
+      const n = new Date(), x = new Date(n);
+      x.setHours(24,0,0,0);
+      return x - n + 5000;
+    }
+    setTimeout(() => location.reload(), msToMidnight());
+
+    // Kick off
+    load(urls[0]);
+  })();
   </script>
 </body>
 </html>
