@@ -1,94 +1,59 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>Kiosk Rotation</title>
-  <style>
-    html,body{margin:0;height:100%;background:#000;overflow:hidden}
-    iframe{
-      position:fixed; inset:0; width:100%; height:100%; border:0; display:block;
-      opacity:0; transition:opacity .45s ease;
-    }
-    iframe.ready{ opacity:1; }
-    .msg{
-      position:fixed; inset:auto 0 0 0; padding:8px 12px; font:14px/1.4 system-ui, sans-serif;
-      color:#9aa6b2; background:rgba(0,0,0,.4); text-align:center;
-    }
-  </style>
-</head>
-<body>
-  <iframe id="frame" src="about:blank" referrerpolicy="no-referrer"></iframe>
-  <div class="msg" id="status" aria-live="polite"></div>
+<script>
+(function(){
+  const urls = [
+    "https://iqamah.lancasterisoc.org/",
+    "https://posters.lancasterisoc.org/"
+  ];
 
-  <script>
-  (function(){
-    const urls = [
-      "https://iqamah.lancasterisoc.org/",
-      "https://posters.lancasterisoc.org/"
-    ];
+  const qs = new URLSearchParams(location.search);
+  const durationMs = Math.max(5, +(qs.get('t')||60)) * 1000;
 
-    // Duration: ?t=90 (seconds) overrides default 60
-    const qs = new URLSearchParams(location.search);
-    const durationMs = Math.max(5, +(qs.get('t')||60)) * 1000;
+  const frame = document.getElementById("frame");
+  let i = 0, rotateTimer = null, loadGuard = null;
 
-    const frame = document.getElementById('frame');
-    const status = document.getElementById('status');
-    let i = 0, timer = null, loadGuard = null;
+  function next(){
+    i = (i + 1) % urls.length;
+    load(urls[i]);
+  }
 
-    function say(m){ status.textContent = m||''; }
+  function scheduleNext(){
+    clearTimeout(rotateTimer);
+    rotateTimer = setTimeout(next, durationMs); // full 60s after load
+  }
 
-    function next(){
-      i = (i + 1) % urls.length;
-      load(urls[i]);
-    }
+  function load(url){
+    clearTimeout(loadGuard);
+    clearTimeout(rotateTimer);
 
-    function load(url){
-      clearTimeout(loadGuard);
-      frame.classList.remove('ready');
-      frame.src = 'about:blank'; // hard reset before swapping
-      say('Loading: ' + url);
+    frame.classList.remove("ready");
+    frame.src = "about:blank";
 
-      // Start loading
+    requestAnimationFrame(() => {
+      frame.addEventListener("load", () => {
+        clearTimeout(loadGuard);        // cancel the skip timer
+        frame.classList.add("ready");
+        scheduleNext();                 // start 60s countdown now
+      }, { once:true });
+
+      // guard: if site never loads, skip after 12s
+      loadGuard = setTimeout(() => next(), 12000);
       frame.src = url;
-
-      // If it loads, fade in and schedule next swap
-      const onload = () => {
-        frame.classList.add('ready');
-        say('');
-        schedule();
-      };
-      frame.onload = onload;
-
-      // If a page blocks framing or is down, skip it
-      loadGuard = setTimeout(() => {
-        say('Skipped (took too long): ' + url);
-        next();
-      }, 8000); // 8s max to become "ready"
-    }
-
-    function schedule(){
-      clearTimeout(timer);
-      timer = setTimeout(next, durationMs);
-    }
-
-    // Pause rotation when tab isn’t visible (kiosk minimised)
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden){ clearTimeout(timer); }
-      else { schedule(); }
     });
+  }
 
-    // Reload daily at midnight to stay fresh
-    function msToMidnight(){
-      const n = new Date(), x = new Date(n);
-      x.setHours(24,0,0,0);
-      return x - n + 5000;
-    }
-    setTimeout(() => location.reload(), msToMidnight());
+  // pause if kiosk window hidden, resume with full interval
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) clearTimeout(rotateTimer);
+    else scheduleNext();
+  });
 
-    // Kick off
-    load(urls[0]);
-  })();
-  </script>
-</body>
-</html>
+  // auto refresh daily
+  function msToMidnight(){
+    const n=new Date(), x=new Date(n); x.setHours(24,0,0,0);
+    return x-n+5000;
+  }
+  setTimeout(()=>location.reload(), msToMidnight());
+
+  load(urls[0]);
+})();
+</script>
